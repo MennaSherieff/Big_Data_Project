@@ -1,0 +1,101 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    hostname: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - bigdata-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    hostname: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - bigdata-net
+
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    hostname: namenode
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    environment:
+      CLUSTER_NAME: ids-cluster
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check: "false"
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    networks:
+      - bigdata-net
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    hostname: datanode
+    depends_on:
+      namenode:
+        condition: service_healthy
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+    networks:
+      - bigdata-net
+
+  spark:
+    image: apache/spark:3.5.1-python3
+    container_name: spark
+    hostname: spark
+    depends_on:
+      - namenode
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    volumes:
+      - ./data:/data
+      - ./kafka:/kafka
+    command: >
+      bash -c "/opt/spark/sbin/start-master.sh && tail -f /dev/null"
+    networks:
+      - bigdata-net
+
+  python-runner:
+    image: python:3.11-slim
+    container_name: python-runner
+    hostname: python-runner
+    depends_on:
+      - kafka
+      - namenode
+    volumes:
+      - ./data:/data
+      - ./kafka:/kafka
+      - ./scripts:/scripts
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /kafka
+    command: sleep infinity
+    networks:
+      - bigdata-net
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode:
+
+networks:
+  bigdata-net:
+    driver: bridge
