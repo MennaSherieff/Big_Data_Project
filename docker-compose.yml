@@ -68,8 +68,10 @@ services:
       - "8080:8080"
       - "7077:7077"
     volumes:
+      - ./:/opt/spark/work-dir
       - ./data:/data
       - ./kafka:/kafka
+    working_dir: /opt/spark/work-dir
     command: >
       bash -c "/opt/spark/sbin/start-master.sh && tail -f /dev/null"
     networks:
